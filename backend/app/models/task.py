@@ -19,5 +19,6 @@ class Task(Base):
     created_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
-    assignee = relationship("User", back_populates="tasks", foreign_keys=[assignee_id])
+    organization = relationship("Organization", back_populates="tasks")
+    assignee = relationship("User", back_populates="tasks", foreign_keys=[assignee_id], lazy="selectin")
     creator = relationship("User", back_populates="created_tasks", foreign_keys=[created_by_id])

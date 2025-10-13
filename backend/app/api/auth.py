@@ -3,10 +3,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models.user import User
-from app.schemas.auth import UserRegister, UserLogin, OTPVerify, Token
+from app.schemas.auth import UserRegister, UserLogin, OTPVerify, Token, TokenResponse, RefreshTokenRequest
 from app.services.auth import register_organization_and_admin, authenticate_user, generate_otp, store_otp, verify_and_consume_otp
 from app.db.session import get_db
-from app.core.security import create_access_token
+from app.core.security import create_access_token, create_refresh_token, store_refresh_token, verify_refresh_token
 from app.models.organization import Organization
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -33,6 +33,7 @@ async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
         email=data.email,
         password=data.password,
         org_name=data.organization_name,
+        name=data.name,
         db=db  # Pass session to keep transaction atomic
     )
 
@@ -59,7 +60,7 @@ async def login(data: UserLogin, db: AsyncSession = Depends(get_db)): # In Postm
     
     return {"msg": "OTP sent", "email": data.email}
 
-@router.post("/verify-otp", response_model=Token)
+@router.post("/verify-otp", response_model=TokenResponse)
 async def verify_otp(data: OTPVerify, db: AsyncSession = Depends(get_db)):
     user_data = verify_and_consume_otp(data.email, data.otp)
     if not user_data:
@@ -82,4 +83,34 @@ async def verify_otp(data: OTPVerify, db: AsyncSession = Depends(get_db)):
             "role": user.role
         }
     )
+    
+    # Create and store refresh token
+    refresh_token = create_refresh_token()
+    await store_refresh_token(db, user.id, refresh_token)
+    
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer"
+    }
+
+@router.post("/refresh", response_model=Token)
+async def refresh_access_token(data: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
+
+    user = await verify_refresh_token(db, data.refresh_token)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token"
+        )
+    
+    # Issue new access token
+    access_token = create_access_token(
+        data={
+            "sub": str(user.id),
+            "org_id": str(user.org_id),
+            "role": user.role
+        }
+    )
+    
     return {"access_token": access_token, "token_type": "bearer"}

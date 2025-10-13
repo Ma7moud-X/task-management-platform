@@ -1,14 +1,17 @@
 from fastapi import Depends, HTTPException, status
 from passlib.context import CryptContext
 import jwt
+import secrets
 from sqlalchemy import select
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from uuid import UUID
 from app.core.config import settings
 from app.models.user import User, UserRole
 from app.db.session import get_db
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.models.refresh_token import RefreshToken
 
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto") # deprecated: Automatically handles scheme migration
@@ -39,6 +42,59 @@ def verify_access_token(token: str) -> Dict[str, Any]:
         return payload
     except jwt.PyJWTError:
         raise ValueError("Invalid token") 
+
+def create_refresh_token() -> str:
+    return secrets.token_urlsafe(32)
+
+async def store_refresh_token(db: AsyncSession, user_id: UUID, token: str) -> None:
+    
+    expires_at = datetime.now(timezone.utc) + timedelta(days=30)  # 30 days expiry
+    
+    refresh_token = RefreshToken(
+        token=token,
+        user_id=user_id,
+        expires_at=expires_at
+    )
+    db.add(refresh_token)
+    await db.commit()
+
+async def verify_refresh_token(db: AsyncSession, token: str) -> Optional[User]:
+    
+    result = await db.execute(
+        select(RefreshToken).where(RefreshToken.token == token)
+    )
+    refresh_token = result.scalars().first()
+    
+    if not refresh_token:
+        return None
+    
+    if refresh_token.revoked:
+        return None
+    
+    if datetime.now(timezone.utc) > refresh_token.expires_at:
+        return None
+    
+    # Get user
+    result = await db.execute(
+        select(User).where(User.id == refresh_token.user_id)
+    )
+    user = result.scalars().first()
+    
+    return user
+
+async def revoke_refresh_token(db: AsyncSession, token: str) -> bool:
+    
+    result = await db.execute(
+        select(RefreshToken).where(RefreshToken.token == token)
+    )
+    refresh_token = result.scalars().first()
+    
+    if not refresh_token:
+        return False
+    
+    refresh_token.revoked = True
+    await db.commit()
+    return True 
 
 # Fast token-only auth for most endpoints
 async def get_current_user_light(cred: HTTPAuthorizationCredentials = Depends(HTTPBearer())):

@@ -11,14 +11,17 @@ from app.models.user import User
 from app.core.security import get_password_hash, verify_password
 from app.schemas.auth import UserRole
 
-async def register_organization_and_admin(email: str, password: str, org_name: str, db: AsyncSession) -> User:
+async def register_organization_and_admin(email: str, password: str, org_name: str, db: AsyncSession, name: Optional[str] = None) -> User:
     # Create organization
     org = Organization(id=uuid.uuid4(), name=org_name)
     db.add(org)
     await db.flush()  # Get org.id which is needed to create a user 
     # Create admin user
+    # Use provided name or extract from email (part before @)
+    user_name = name if name else email.split('@')[0]
     user = User(
         email=email,
+        name=user_name,
         hashed_password=get_password_hash(password),
         role=UserRole.ADMIN,
         org_id=org.id

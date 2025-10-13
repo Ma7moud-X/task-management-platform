@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.db.base import Base
 from app.core.config import settings
 # Import all models for Alembic to detect them
-from app.models import Organization, User, Task # To avoid circular errors
+from app.models import Organization, User, Task, RefreshToken # To avoid circular errors
 
 from alembic import context
 
