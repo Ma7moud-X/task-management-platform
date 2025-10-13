@@ -8,7 +8,13 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES : int
     SECRET_KEY: str
     REDIS_URL: str
-    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_ID: str
+    BREVO_API_KEY: str
+    FROM_EMAIL: str
+    FROM_NAME: str = "Task Manager"
+    BASE_URL: str = "http://localhost:8000"  # Base URL for download links
+    LOG_LEVEL: str = "INFO"
+    
 
     model_config = ConfigDict(env_file=".env", extra="ignore")
 

@@ -7,11 +7,15 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional
 from uuid import UUID
 from app.core.config import settings
-from app.models.user import User, UserRole
+from app.models.user import User
+from app.schemas.auth import UserRole
 from app.db.session import get_db
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.refresh_token import RefreshToken
+from app.core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto") # deprecated: Automatically handles scheme migration
@@ -40,7 +44,8 @@ def verify_access_token(token: str) -> Dict[str, Any]:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
-    except jwt.PyJWTError:
+    except jwt.PyJWTError as e:
+        logger.warning("Invalid access token", extra={"error": str(e)})
         raise ValueError("Invalid token") 
 
 def create_refresh_token() -> str:
@@ -106,6 +111,7 @@ async def get_current_user_light(cred: HTTPAuthorizationCredentials = Depends(HT
             "role": payload["role"]
         }
     except ValueError:
+        logger.warning("Unauthorized access attempt")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token"
