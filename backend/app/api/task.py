@@ -1,12 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
+import jwt
 from app.core.security import require_admin, require_member
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskStatus
 from app.schemas.auth import UserRole
-from app.services.task import create_task, get_tasks, update_task, delete_task
+from app.services.task import create_task, get_tasks, publish_task_event, update_task, delete_task
 from app.db.session import get_db
+from app.db.redis import redis_client
+from app.core.config import settings
+from celery_app import celery_app
 
 router = APIRouter()
 
@@ -23,6 +27,12 @@ async def create_task_endpoint(org_id: UUID, task_in: TaskCreate, db: AsyncSessi
         org_id=org_id,
         creator_id=UUID(current_user["user_id"])
     )
+    await publish_task_event(
+        org_id=str(task.org_id),
+        event_type="created",
+        task_data=TaskResponse.model_validate(task).model_dump(mode='json')
+    )
+    
     return task
 
 @router.get("/organizations/{org_id}/tasks", response_model=list[TaskResponse])
@@ -45,9 +55,22 @@ async def list_tasks(org_id: UUID, db: AsyncSession = Depends(get_db), current_u
     )
     return tasks
 
+@router.post("/tasks/{task_id}/export", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_task_export(task_id: UUID, current_user: dict = Depends(require_member)):
+    
+    task = celery_app.send_task(
+        "app.workers.task_export.export_task_to_csv",
+        args=[str(task_id), str(current_user["org_id"])]
+    )
+    
+    return {
+        "message": "CSV export started",
+        "task_id": str(task_id),
+        "celery_task_id": task.id
+    }
+
 @router.put("/tasks/{task_id}", response_model=TaskResponse)
 async def update_task_endpoint(task_id: UUID, task_update: TaskUpdate, db: AsyncSession = Depends(get_db), current_user: dict = Depends(require_member)):
-    # Tenant checking is done in the service layer by verifying task.org_id matches current_user's org_id
     task = await update_task(
         db=db,
         task_id=task_id,
@@ -56,16 +79,46 @@ async def update_task_endpoint(task_id: UUID, task_update: TaskUpdate, db: Async
         current_user_id=UUID(current_user["user_id"]),
         role=UserRole(current_user["role"])
     )
+    await publish_task_event(
+        org_id=str(task.org_id),
+        event_type="updated",
+        task_data=TaskResponse.model_validate(task).model_dump(mode='json')
+    )
     return task
 
 @router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_task_endpoint(task_id: UUID, db: AsyncSession = Depends(get_db), current_user: dict = Depends(require_admin)):
-    # Tenant checking is done in the service layer by verifying task.org_id matches current_user's org_id
-    await delete_task(
+    task = await delete_task(
         db=db,
         task_id=task_id,
         org_id=UUID(current_user["org_id"]),
         current_user_id=UUID(current_user["user_id"]),
         role=UserRole(current_user["role"])
     )
+    await publish_task_event(
+        org_id=str(task.org_id),
+        event_type="deleted",
+        task_data=TaskResponse.model_validate(task).model_dump(mode='json')
+    )
     return None
+
+@router.get("/tasks/download/{token}")
+async def download_task_csv(token: str):
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        csv_key = payload["csv_key"]
+        task_id = payload["task_id"]
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=400, detail="Download link expired")
+    except (jwt.InvalidTokenError, KeyError):
+        raise HTTPException(status_code=400, detail="Invalid download token")
+
+    csv_data = await redis_client.get(csv_key)
+    if not csv_data:
+        raise HTTPException(status_code=404, detail="Export not found or expired")
+
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=task_{task_id}_export.csv"}
+    )

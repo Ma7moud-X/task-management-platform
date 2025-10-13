@@ -8,6 +8,8 @@ from app.models.task import Task
 from app.models.user import User
 from app.schemas.task import TaskCreate, TaskUpdate, TaskStatus
 from app.schemas.auth import UserRole
+from app.db.redis import redis_client
+import json
 
 
 async def create_task(db: AsyncSession, 
@@ -132,7 +134,7 @@ async def update_task(db: AsyncSession,
     return task
 
 async def delete_task(db: AsyncSession,
-    *, task_id: UUID, org_id: UUID, current_user_id: UUID, role: UserRole) -> None:
+    *, task_id: UUID, org_id: UUID, current_user_id: UUID, role: UserRole) -> Task:
     
     # Only admins can delete tasks
     if role != UserRole.ADMIN:
@@ -152,3 +154,14 @@ async def delete_task(db: AsyncSession,
     
     await db.delete(task)
     await db.commit()
+    return task
+    
+
+
+async def publish_task_event(org_id: str, event_type: str, task_data: dict):
+    channel = f"org:{org_id}:tasks"
+    message = {
+        "event": event_type,  # "created", "updated", "deleted"
+        "data": task_data
+    }
+    await redis_client.publish(channel, json.dumps(message, default=str))
