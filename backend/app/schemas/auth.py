@@ -1,5 +1,9 @@
 from pydantic import BaseModel, EmailStr
+from enum import Enum
 
+class UserRole(str, Enum):
+    ADMIN = "admin"
+    MEMBER = "member"
 class UserRegister(BaseModel):
     email: EmailStr
     password: str

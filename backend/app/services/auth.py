@@ -1,8 +1,15 @@
 import uuid
+import secrets
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.organization import Organization
 from app.models.user import User
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.security import get_password_hash
+from app.core.security import get_password_hash, verify_password
+from app.schemas.auth import UserRole
 
 async def register_organization_and_admin(email: str, password: str, org_name: str, db: AsyncSession) -> User:
     # Create organization
@@ -13,10 +20,49 @@ async def register_organization_and_admin(email: str, password: str, org_name: s
     user = User(
         email=email,
         hashed_password=get_password_hash(password),
-        role="admin",
+        role=UserRole.ADMIN,
         org_id=org.id
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
     return user
+
+async def authenticate_user(db: AsyncSession, email: str, password: str) -> Optional[User]:
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalars().first()
+    if not user or not verify_password(password, user.hashed_password):
+        return None
+    return user
+
+# In-memory OTP store (replace with Redis in production)
+OTP_STORE: dict[str, dict] = {}
+
+def generate_otp() -> str:
+    return f"{secrets.randbelow(1000000):06d}"  # 6-digit zero-padded
+
+def store_otp(email: str, otp: str, user_id: str, org_id: str) -> None:
+    OTP_STORE[email] = {
+        "otp": otp,
+        "user_id": user_id,
+        "org_id": org_id,
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5)
+    }
+
+def verify_and_consume_otp(email: str, otp: str) -> Optional[dict]:
+    record = OTP_STORE.get(email)
+    if not record:
+        return None
+    if record["otp"] != otp:
+        return None
+    if datetime.now(timezone.utc) > record["expires_at"]:
+        del OTP_STORE[email]
+        return None
+    # Consume OTP (one-time use)
+    user_data = {
+        "user_id": record["user_id"],
+        "org_id": record["org_id"]
+    }
+    del OTP_STORE[email]
+    return user_data
+
