@@ -10,6 +10,7 @@ class Organization(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
+    domain = Column(String, nullable=False, unique=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     users = relationship("User", back_populates="organization")

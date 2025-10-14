@@ -14,8 +14,17 @@ from app.schemas.auth import UserRole
 from app.db.redis import redis_client
 
 async def register_organization_and_admin(email: str, password: str, org_name: str, db: AsyncSession, name: Optional[str] = None) -> User:
-    # Create organization
-    org = Organization(id=uuid.uuid4(), name=org_name)
+    # Extract domain from email
+    domain = email.split('@')[1]
+    
+    # Check if organization with this domain already exists
+    result = await db.execute(select(Organization).where(Organization.domain == domain))
+    existing_org = result.scalars().first()
+    
+    if existing_org:
+        raise ValueError(f"Organization with domain '{domain}' already exists")
+    
+    org = Organization(id=uuid.uuid4(), name=org_name, domain=domain)
     db.add(org)
     await db.flush()  # Get org.id which is needed to create a user 
     # Create admin user
@@ -83,10 +92,7 @@ async def get_or_create_user_from_google(db: AsyncSession, email: str, name: str
     # If not, check if email domain matches an existing org
     domain = email.split("@")[-1]
     org_result = await db.execute(
-        select(Organization)
-        .join(User, User.org_id == Organization.id)
-        .where(User.email.like(f"%@{domain}"))
-        .limit(1)
+        select(Organization).where(Organization.domain == domain)
     )
     org = org_result.scalars().first()
     if not org:
