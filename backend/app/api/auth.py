@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+import urllib.parse
+import requests
 
 from app.models.user import User
 from app.schemas.auth import UserRegister, UserLogin, OTPVerify, Token, TokenResponse, RefreshTokenRequest, GoogleLogin
@@ -11,6 +14,7 @@ from app.models.organization import Organization
 from app.core.auth_google import verify_google_id_token
 from app.core.email import send_otp_email
 from app.core.logging_config import get_logger
+from app.core.config import settings
 
 logger = get_logger(__name__)
 
@@ -29,14 +33,6 @@ async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
-        
-    result = await db.execute(select(Organization).where(Organization.name == data.organization_name))
-    if result.scalars().first():
-        logger.warning("Registration failed - org exists", extra={"org_name": data.organization_name})
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Organization already registered"
-        )
 
     user = await register_organization_and_admin(
         email=data.email,
@@ -46,14 +42,99 @@ async def register(data: UserRegister, db: AsyncSession = Depends(get_db)):
         db=db  # Pass session to keep transaction atomic
     )
 
-    logger.info("Registration successful", extra={"user_id": str(user.id), "org_id": str(user.org_id)})
+    logger.info("Registration successful", extra={"user_id": str(user.id), "org_id": str(user.org_id), "role": user.role.value})
+    
+    # Return different message based on role
+    if user.role.value == "admin":
+        message = "Organization and admin created"
+    else:
+        message = "User registered as member of existing organization"
+    
     return {
-        "msg": "Organization and admin created",
+        "msg": message,
         "user_id": str(user.id),
-        "org_id": str(user.org_id)
+        "org_id": str(user.org_id),
+        "role": user.role.value
     }    
 
-@router.post("/login/google", response_model=TokenResponse)  # Change from Token to TokenResponse
+@router.get("/login/google")
+async def google_oauth_login():
+    """Initiate Google OAuth2 flow by redirecting to Google's authorization page"""
+    logger.info("Initiating Google OAuth2 flow")
+    
+    redirect_uri = f"{settings.BASE_URL}/auth/google/callback"
+    google_auth_url = (
+        "https://accounts.google.com/o/oauth2/v2/auth?"
+        f"client_id={settings.GOOGLE_CLIENT_ID}&"
+        f"redirect_uri={urllib.parse.quote(redirect_uri)}&"
+        "response_type=code&"
+        "scope=openid%20email%20profile&"
+        "access_type=offline&"
+        "prompt=select_account"
+    )
+    
+    return RedirectResponse(url=google_auth_url)
+
+@router.get("/google/callback")
+async def google_oauth_callback(code: str, db: AsyncSession = Depends(get_db)):
+    """Handle Google OAuth2 callback and exchange code for tokens"""
+    logger.info("Processing Google OAuth2 callback")
+    
+    try:
+        # Exchange authorization code for tokens
+        token_url = "https://oauth2.googleapis.com/token"
+        token_data = {
+            "code": code,
+            "client_id": settings.GOOGLE_CLIENT_ID,
+            "client_secret": settings.GOOGLE_CLIENT_SECRET,
+            "redirect_uri": f"{settings.BASE_URL}/auth/google/callback",
+            "grant_type": "authorization_code"
+        }
+        
+        token_response = requests.post(token_url, data=token_data)
+        if token_response.status_code != 200:
+            logger.error("Failed to exchange code for tokens", extra={"error": token_response.text})
+            return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/login?error=oauth_failed")
+        
+        tokens = token_response.json()
+        id_token = tokens.get("id_token")
+        
+        # Verify ID token
+        google_payload = verify_google_id_token(id_token)
+        email = google_payload["email"]
+        name = google_payload.get("name", email.split("@")[0])
+        logger.info("Google token verified", extra={"email": email})
+        
+        # Get or create user
+        user = await get_or_create_user_from_google(db, email, name)
+        logger.info("Google login successful", extra={"user_id": str(user.id), "email": email})
+        
+        # Create JWT tokens
+        access_token = create_access_token(
+            data={
+                "sub": str(user.id),
+                "email": user.email,
+                "org_id": str(user.org_id),
+                "role": user.role.value
+            }
+        )
+        
+        refresh_token = create_refresh_token()
+        await store_refresh_token(db, user.id, refresh_token)
+        
+        # Redirect to frontend with tokens
+        redirect_url = (
+            f"{settings.FRONTEND_URL}/auth/google/success?"
+            f"access_token={access_token}&"
+            f"refresh_token={refresh_token}"
+        )
+        return RedirectResponse(url=redirect_url)
+        
+    except Exception as e:
+        logger.error("Google OAuth2 callback failed", extra={"error": str(e)})
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/login?error=oauth_failed")
+
+@router.post("/login/google", response_model=TokenResponse)
 async def google_login(data: GoogleLogin, db: AsyncSession = Depends(get_db)):
     logger.info("Google login attempt")
     
@@ -110,7 +191,7 @@ async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
     
     send_otp_email(data.email, otp)
 
-    logger.info("OTP sent", extra={"email": data.email, "otp": otp})
+    logger.info("OTP sent", extra={"email": data.email})
     
     return {"msg": "OTP sent", "email": data.email}
 

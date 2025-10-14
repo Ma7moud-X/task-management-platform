@@ -40,7 +40,7 @@ export default function VerifyOtpPage() {
         body: JSON.stringify({ email, otp }),
       });
 
-      setAuth(response.access_token);
+      setAuth(response.access_token, response.refresh_token);
 
       router.push('/dashboard');
     } catch (err: any) {
@@ -80,7 +80,7 @@ export default function VerifyOtpPage() {
           <button
             type="submit"
             disabled={loading || otp.length !== 6}
-            className="w-full py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="w-full py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
           >
             {loading ? 'Verifying...' : 'Verify'}
           </button>

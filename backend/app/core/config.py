@@ -9,10 +9,12 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     REDIS_URL: str
     GOOGLE_CLIENT_ID: str
+    GOOGLE_CLIENT_SECRET: str
     BREVO_API_KEY: str
     FROM_EMAIL: str
     FROM_NAME: str = "Task Manager"
     BASE_URL: str = "http://localhost:8000"  # Base URL for download links
+    FRONTEND_URL: str = "http://localhost:3000"  # Frontend URL for OAuth2 redirect
     LOG_LEVEL: str = "INFO"
     
 

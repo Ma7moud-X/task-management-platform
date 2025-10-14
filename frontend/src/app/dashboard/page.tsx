@@ -6,11 +6,16 @@ import { api } from '@/lib/api';
 import { getAccessToken, getCurrentUser, clearAuth } from '@/lib/auth';
 import { Task } from '@/types';
 import { useWebSocketTasks } from '@/hooks/useWebSocketTasks';
+import TaskForm from '@/components/tasks/TaskForm';
+
 
 export default function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [exporting, setExporting] = useState(false);
   const router = useRouter();
 
   // Fetch initial tasks
@@ -51,13 +56,23 @@ export default function DashboardPage() {
 
   // Real-time updates via WebSocket
   const handleTaskCreated = useCallback((task: Task) => {
-    setTasks((prev) => [task, ...prev]);
+    setTasks((prev) => {
+      // Prevent duplicates - check if task already exists
+      if (prev.some(t => t.id === task.id)) {
+        return prev;
+      }
+      return [task, ...prev];
+    });
   }, []);
 
   const handleTaskUpdated = useCallback((updatedTask: Task) => {
-    setTasks((prev) =>
-      prev.map((task) => (task.id === updatedTask.id ? updatedTask : task))
-    );
+    setTasks((prev) => {
+      // Only update if task exists in list
+      const exists = prev.some(t => t.id === updatedTask.id);
+      if (!exists) return prev;
+      
+      return prev.map((task) => (task.id === updatedTask.id ? updatedTask : task));
+    });
   }, []);
 
   const handleTaskDeleted = useCallback((taskId: string) => {
@@ -73,6 +88,43 @@ export default function DashboardPage() {
     handleTaskUpdated, 
     handleTaskDeleted
   );
+
+  // Handle export functionality
+  const handleExport = async (taskId: string) => {
+    setExporting(true);
+    try {
+      await api(`/tasks/${taskId}/export`, {
+        method: 'POST',
+      });
+      alert('Export started. You will receive an email shortly.');
+    } catch (err: any) {
+      alert('Export failed: ' + (err.message || 'Unknown error'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Handle edit task
+  const handleEdit = (task: Task) => {
+    setEditingTask(task);
+    setShowForm(true);
+  };
+
+  // Handle delete task
+  const handleDelete = async (taskId: string) => {
+    if (!window.confirm('Are you sure you want to delete this task?')) {
+      return;
+    }
+
+    try {
+      await api(`/tasks/${taskId}`, {
+        method: 'DELETE',
+      });
+      // WebSocket will handle removing the task from the list
+    } catch (err: any) {
+      alert('Failed to delete task: ' + (err.message || 'Unknown error'));
+    }
+  };
 
   if (loading) {
     return (
@@ -95,23 +147,97 @@ export default function DashboardPage() {
 
       {error && <div className="p-2 mb-4 text-red-200 bg-red-900/50 rounded border border-red-700">{error}</div>}
 
+      {user && user.role === 'admin' && (
+        <div className="flex justify-end items-center mb-4">
+          <button
+            onClick={() => setShowForm(true)}
+            className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 cursor-pointer transition-colors"
+          >
+            + New Task
+          </button>
+        </div>
+      )}
+
       <div className="bg-gray-800 rounded-lg shadow-xl border border-gray-700 overflow-hidden">
         {tasks.length === 0 ? (
           <div className="p-8 text-center text-gray-400">No tasks yet</div>
         ) : (
           <ul className="divide-y divide-gray-700">
             {tasks.map((task) => (
-              <li key={task.id} className="p-4 hover:bg-gray-700 transition-colors">
-                <h3 className="font-medium text-white">{task.title}</h3>
-                <p className="text-sm text-gray-300 mt-1">
-                  Status: <span className="capitalize">{task.status}</span>
-                  {task.due_date && <> • Due: {new Date(task.due_date).toLocaleDateString()}</>}
-                </p>
+              <li key={task.id} className="p-4 hover:bg-gray-750 transition-colors">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-white text-lg">{task.title}</h3>
+                    {task.description && (
+                      <p className="text-sm text-gray-400 mt-1">{task.description}</p>
+                    )}
+                    <div className="flex items-center gap-3 mt-2 text-sm text-gray-300">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-900/50 text-blue-200 border border-blue-700">
+                        {task.status.replace('_', ' ')}
+                      </span>
+                      {task.due_date && (
+                        <span className="text-gray-400">
+                          Due: {new Date(task.due_date).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2 ml-4">
+                    {/* Export Button - Only for admins */}
+                    {user && user.role === 'admin' && (
+                      <button
+                        onClick={() => handleExport(task.id)}
+                        disabled={exporting}
+                        className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                        title="Export this task"
+                      >
+                        Export
+                      </button>
+                    )}
+                    
+                    {/* Edit Button - For all members */}
+                    <button
+                      onClick={() => handleEdit(task)}
+                      className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 cursor-pointer transition-colors"
+                      title="Edit task"
+                    >
+                      Edit
+                    </button>
+                    
+                    {/* Delete Button - Only for admins */}
+                    {user && user.role === 'admin' && (
+                      <button
+                        onClick={() => handleDelete(task.id)}
+                        className="px-3 py-1.5 bg-red-600 text-white text-sm rounded hover:bg-red-700 cursor-pointer transition-colors"
+                        title="Delete task"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                </div>
               </li>
             ))}
           </ul>
         )}
       </div>
+
+      {showForm && user && (
+        <TaskForm
+          orgId={user.org_id}
+          task={editingTask}
+          onSubmit={() => {
+            setShowForm(false);
+            setEditingTask(null);
+            // WebSocket will handle adding/updating the task in the list
+          }}
+          onCancel={() => {
+            setShowForm(false);
+            setEditingTask(null);
+          }}
+        />
+      )}
     </div>
   );
 }

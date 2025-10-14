@@ -2,6 +2,9 @@ from brevo_python import ApiClient, Configuration
 from brevo_python.api.transactional_emails_api import TransactionalEmailsApi
 from brevo_python.models import SendSmtpEmail
 from app.core.config import settings
+from app.core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 def get_brevo_client():
     configuration = Configuration()
@@ -21,7 +24,7 @@ def send_otp_email(email: str, otp: str):
         )
         api_instance.send_transac_email(send_email)
     except Exception as e:
-        print(f"[ERROR] Failed to send OTP email to {email}: {str(e)}")
+        logger.error("Failed to send OTP email", extra={"email": email, "error": str(e)})
         raise
 
 def send_csv_export_email(email: str, download_url: str):
@@ -37,5 +40,5 @@ def send_csv_export_email(email: str, download_url: str):
         )
         api_instance.send_transac_email(send_email)
     except Exception as e:
-        print(f"[ERROR] Failed to send CSV export email to {email}: {str(e)}")
+        logger.error("Failed to send CSV export email", extra={"email": email, "error": str(e)})
         raise

@@ -40,7 +40,7 @@ export function useWebSocketTasks(
 
     return () => {
       unsubscribe();
-      // Don't disconnect globally — other components might need it
+      // Don't disconnect globally - other components might need it
     };
   }, [orgId, handleMessage]);
 }

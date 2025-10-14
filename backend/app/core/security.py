@@ -18,7 +18,7 @@ from app.core.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto") # deprecated: Automatically handles scheme migration
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")  # deprecated: Automatically handles scheme migration
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)

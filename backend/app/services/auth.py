@@ -21,15 +21,29 @@ async def register_organization_and_admin(email: str, password: str, org_name: s
     result = await db.execute(select(Organization).where(Organization.domain == domain))
     existing_org = result.scalars().first()
     
-    if existing_org:
-        raise ValueError(f"Organization with domain '{domain}' already exists")
-    
-    org = Organization(id=uuid.uuid4(), name=org_name, domain=domain)
-    db.add(org)
-    await db.flush()  # Get org.id which is needed to create a user 
-    # Create admin user
     # Use provided name or extract from email (part before @)
     user_name = name if name else email.split('@')[0]
+    
+    if existing_org:
+        # Organization exists, create user as MEMBER
+        user = User(
+            email=email,
+            name=user_name,
+            hashed_password=get_password_hash(password),
+            role=UserRole.MEMBER,
+            org_id=existing_org.id
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        return user
+    
+    # Organization doesn't exist, create it and make user ADMIN
+    org = Organization(id=uuid.uuid4(), name=org_name, domain=domain)
+    db.add(org)
+    await db.flush()  # Get org.id which is needed to create a user
+    
+    # Create admin user
     user = User(
         email=email,
         name=user_name,

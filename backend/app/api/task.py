@@ -19,7 +19,7 @@ router = APIRouter()
 
 
 @router.post("/organizations/{org_id}/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
-async def create_task_endpoint(org_id: UUID, task_in: TaskCreate, db: AsyncSession = Depends(get_db), current_user: dict = Depends(require_member)):
+async def create_task_endpoint(org_id: UUID, task_in: TaskCreate, db: AsyncSession = Depends(get_db), current_user: dict = Depends(require_admin)):
     logger.info("Creating task", extra={"org_id": str(org_id), "user_id": current_user["user_id"], "title": task_in.title})
     
     if str(current_user["org_id"]) != str(org_id):

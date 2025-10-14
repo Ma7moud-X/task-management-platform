@@ -34,7 +34,7 @@ AsyncSessionLocal = sessionmaker(
     autoflush=False,  # Prevent automatic flushes
 )
 
-@celery.task(bind=True) # bind give access to self
+@celery.task(bind=True)  # bind gives access to self
 def export_task_to_csv(self, task_id: str, org_id: str):
     logger.info("CSV export started", extra={"task_id": task_id, "org_id": org_id, "celery_task_id": self.request.id})
 

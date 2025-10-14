@@ -30,7 +30,6 @@ export class WebSocketManager {
     this.socket = new WebSocket(url);
 
     this.socket.onopen = () => {
-      console.log('WebSocket connected');
       if (this.retryTimeout) {
         clearTimeout(this.retryTimeout);
         this.retryTimeout = null;
@@ -51,7 +50,6 @@ export class WebSocketManager {
     };
 
     this.socket.onclose = () => {
-      console.log('WebSocket disconnected');
       this.socket = null;
       // Auto-reconnect after 3s (basic resilience)
       if (this.orgId) {
