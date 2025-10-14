@@ -78,6 +78,7 @@ async def google_login(data: GoogleLogin, db: AsyncSession = Depends(get_db)):
     access_token = create_access_token(
         data={
             "sub": str(user.id),
+            "email": user.email,
             "org_id": str(user.org_id),
             "role": user.role.value  # Convert enum to string value
         }
@@ -136,6 +137,7 @@ async def verify_otp(data: OTPVerify, db: AsyncSession = Depends(get_db)):
     access_token = create_access_token(
         data={
             "sub": str(user.id),
+            "email": user.email,
             "org_id": str(user.org_id),
             "role": user.role.value  # Convert enum to string value
         }
@@ -168,6 +170,7 @@ async def refresh_access_token(data: RefreshTokenRequest, db: AsyncSession = Dep
     access_token = create_access_token(
         data={
             "sub": str(user.id),
+            "email": user.email,
             "org_id": str(user.org_id),
             "role": user.role.value  # Convert enum to string value
         }

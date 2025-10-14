@@ -1,23 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { setAuth, getEmailForOtp, clearAuth } from '@/lib/auth';
-import { parseJwt } from '@/lib/jwt';
-import { TokenResponse, AuthUser } from '@/types';
+import { TokenResponse } from '@/types';
 
 export default function VerifyOtpPage() {
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const isVerifying = useRef(false);
 
   const email = getEmailForOtp();
 
   // If no email, send user back to login
   useEffect(() => {
-    if (!email) {
+    if (!email && !isVerifying.current) {
       router.push('/auth/login');
     }
   }, [email, router]);
@@ -31,6 +31,7 @@ export default function VerifyOtpPage() {
 
     setLoading(true);
     setError('');
+    isVerifying.current = true;
 
     try {
       // Backend returns TokenResponse: { access_token, refresh_token, token_type }
@@ -39,26 +40,13 @@ export default function VerifyOtpPage() {
         body: JSON.stringify({ email, otp }),
       });
 
-      // Decode JWT to get user information
-      const payload = parseJwt(response.access_token);
-      if (!payload) {
-        throw new Error('Invalid token received');
-      }
-
-      // Create AuthUser object from JWT payload
-      const user: AuthUser = {
-        id: payload.sub,
-        email: payload.email,
-        role: payload.role,
-        org_id: payload.org_id,
-      };
-
-      setAuth(response.access_token, user);
+      setAuth(response.access_token);
 
       router.push('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Invalid OTP');
       clearAuth();
+      isVerifying.current = false;
     } finally {
       setLoading(false);
     }

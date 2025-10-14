@@ -1,29 +1,36 @@
 import { AuthUser } from '@/types';
 import { parseJwt } from './jwt';
 
-let currentUser: AuthUser | null = null;
-let currentToken: string | null = null;
-let userEmailForOtp: string | null = null;
+const TOKEN_KEY = 'access_token';
+const EMAIL_OTP_KEY = 'email_for_otp';
 
-export function setAuth(token: string, user: AuthUser) {
-  currentToken = token;
-  currentUser = user;
-  userEmailForOtp = null; // clear after login
+// Helper to check if we're in browser environment
+const isBrowser = typeof window !== 'undefined';
+
+export function setAuth(token: string) {
+  if (isBrowser) {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.removeItem(EMAIL_OTP_KEY);
+  }
 }
 
 export function clearAuth() {
-  currentToken = null;
-  currentUser = null;
-  userEmailForOtp = null;
+  if (isBrowser) {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(EMAIL_OTP_KEY);
+  }
 }
 
 export function getAccessToken(): string | null {
-  return currentToken;
+  if (!isBrowser) return null;
+  return localStorage.getItem(TOKEN_KEY);
 }
 
 export function getCurrentUser(): AuthUser | null {
-  if (!currentToken) return null;
-  const payload = parseJwt(currentToken);
+  const token = getAccessToken();
+  if (!token) return null;
+  
+  const payload = parseJwt(token);
   if (!payload) return null;
   
   return {
@@ -35,9 +42,12 @@ export function getCurrentUser(): AuthUser | null {
 }
 
 export function setEmailForOtp(email: string) {
-  userEmailForOtp = email;
+  if (isBrowser) {
+    localStorage.setItem(EMAIL_OTP_KEY, email);
+  }
 }
 
 export function getEmailForOtp(): string | null {
-  return userEmailForOtp;
+  if (!isBrowser) return null;
+  return localStorage.getItem(EMAIL_OTP_KEY);
 }
