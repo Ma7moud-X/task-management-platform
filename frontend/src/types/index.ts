@@ -27,15 +27,17 @@ export interface TokenResponse {
   token_type: string;
 }
 
-// User Model
-export interface User {
+export interface AuthUser {
   id: string;
   email: string;
-  name: string;
   role: UserRole;
   org_id: string;
+}
+export interface User extends AuthUser {
+  name: string;
   created_at: string;
 }
+
 
 // Task Request Types
 export interface TaskCreate {

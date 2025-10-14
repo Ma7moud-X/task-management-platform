@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { setAuth, getEmailForOtp, clearAuth } from '@/lib/auth';
+import { parseJwt } from '@/lib/jwt';
+import { TokenResponse, AuthUser } from '@/types';
 
 export default function VerifyOtpPage() {
   const [otp, setOtp] = useState('');
@@ -31,12 +33,27 @@ export default function VerifyOtpPage() {
     setError('');
 
     try {
-      const response = await api<{ access_token: string; user: any }>('/auth/verify-otp', {
+      // Backend returns TokenResponse: { access_token, refresh_token, token_type }
+      const response = await api<TokenResponse>('/auth/verify-otp', {
         method: 'POST',
         body: JSON.stringify({ email, otp }),
       });
 
-      setAuth(response.access_token, response.user);
+      // Decode JWT to get user information
+      const payload = parseJwt(response.access_token);
+      if (!payload) {
+        throw new Error('Invalid token received');
+      }
+
+      // Create AuthUser object from JWT payload
+      const user: AuthUser = {
+        id: payload.sub,
+        email: payload.email,
+        role: payload.role,
+        org_id: payload.org_id,
+      };
+
+      setAuth(response.access_token, user);
 
       router.push('/dashboard');
     } catch (err: any) {

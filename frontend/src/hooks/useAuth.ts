@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { User } from '@/types';
+import { AuthUser } from '@/types';
 import { getCurrentUser } from '@/lib/auth';
 
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(getCurrentUser());
+  const [user, setUser] = useState<AuthUser | null>(getCurrentUser());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
