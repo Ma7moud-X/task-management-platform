@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { getAccessToken, getCurrentUser, clearAuth } from '@/lib/auth';
 import { Task } from '@/types';
+import { useWebSocketTasks } from '@/hooks/useWebSocketTasks';
 
 export default function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -12,7 +13,8 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
   const router = useRouter();
 
-  useEffect(() => {
+  // Fetch initial tasks
+  const fetchTasks = useCallback(async () => {
     const token = getAccessToken();
     if (!token) {
       router.push('/auth/login');
@@ -26,27 +28,51 @@ export default function DashboardPage() {
       return;
     }
 
-    // Fetch tasks
-    const fetchTasks = async () => {
-      try {
-        const data = await api<Task[]>('/organizations/' + user.org_id + '/tasks', {
-          method: 'GET',
-        });
-        setTasks(data);
-      } catch (err: any) {
-        if (err.message?.includes('401') || err.message?.includes('403')) {
-          clearAuth();
-          router.push('/auth/login');
-        } else {
-          setError('Failed to load tasks');
-        }
-      } finally {
-        setLoading(false);
+    try {
+      const data = await api<Task[]>('/organizations/' + user.org_id + '/tasks', {
+        method: 'GET',
+      });
+      setTasks(data);
+    } catch (err: any) {
+      if (err.message?.includes('401') || err.message?.includes('403')) {
+        clearAuth();
+        router.push('/auth/login');
+      } else {
+        setError('Failed to load tasks');
       }
-    };
-
-    fetchTasks();
+    } finally {
+      setLoading(false);
+    }
   }, [router]);
+
+  useEffect(() => {
+    fetchTasks();
+  }, [fetchTasks]);
+
+  // Real-time updates via WebSocket
+  const handleTaskCreated = useCallback((task: Task) => {
+    setTasks((prev) => [task, ...prev]);
+  }, []);
+
+  const handleTaskUpdated = useCallback((updatedTask: Task) => {
+    setTasks((prev) =>
+      prev.map((task) => (task.id === updatedTask.id ? updatedTask : task))
+    );
+  }, []);
+
+  const handleTaskDeleted = useCallback((taskId: string) => {
+    setTasks((prev) => prev.filter((task) => task.id !== taskId));
+  }, []);
+
+  const user = getCurrentUser();
+  
+  // Subscribe to WebSocket updates (hooks must be called unconditionally)
+  useWebSocketTasks(
+    user?.org_id || '', 
+    handleTaskCreated, 
+    handleTaskUpdated, 
+    handleTaskDeleted
+  );
 
   if (loading) {
     return (
@@ -55,8 +81,6 @@ export default function DashboardPage() {
       </div>
     );
   }
-
-  const user = getCurrentUser();
 
   return (
     <div className="min-h-screen bg-gray-900 p-6">
