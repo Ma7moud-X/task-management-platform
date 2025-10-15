@@ -33,8 +33,9 @@ export default function DashboardPage() {
         method: 'GET',
       });
       setTasks(data);
-    } catch (err: any) {
-      if (err.message?.includes('Session expired') || err.message?.includes('401') || err.message?.includes('403')) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '';
+      if (message.includes('Session expired') || message.includes('401') || message.includes('403')) {
         router.push('/auth/login');
       } else {
         setError('Failed to load tasks');
@@ -91,8 +92,9 @@ export default function DashboardPage() {
         method: 'POST',
       });
       alert('Export started. You will receive an email shortly.');
-    } catch (err: any) {
-      alert('Export failed: ' + (err.message || 'Unknown error'));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      alert('Export failed: ' + message);
     } finally {
       setExporting(false);
     }
@@ -115,8 +117,9 @@ export default function DashboardPage() {
         method: 'DELETE',
       });
       // WebSocket will handle removing the task from the list
-    } catch (err: any) {
-      alert('Failed to delete task: ' + (err.message || 'Unknown error'));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      alert('Failed to delete task: ' + message);
     }
   };
 
@@ -126,7 +129,7 @@ export default function DashboardPage() {
     try {
       await logout();
       router.push('/auth/login');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Logout error:', err);
       // Still redirect even if logout fails
       router.push('/auth/login');

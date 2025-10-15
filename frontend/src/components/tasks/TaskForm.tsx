@@ -66,7 +66,7 @@ export default function TaskForm({ orgId, task, onSubmit, onCancel }: TaskFormPr
       }
 
       onSubmit();
-    } catch (err) {
+    } catch {
       alert(`Failed to ${task ? 'update' : 'create'} task`);
     }
   };

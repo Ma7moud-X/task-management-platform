@@ -41,8 +41,9 @@ export default function VerifyOtpPage() {
       clearEmailForOtp();
 
       router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Invalid OTP');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Invalid OTP';
+      setError(message);
       isVerifying.current = false;
     } finally {
       setLoading(false);

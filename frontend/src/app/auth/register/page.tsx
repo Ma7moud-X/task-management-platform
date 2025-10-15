@@ -58,8 +58,9 @@ export default function RegisterPage() {
       setTimeout(() => {
         router.push('/auth/login');
       }, 2000);
-    } catch (err: any) {
-      setError(err.message || 'Registration failed');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Registration failed';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -127,7 +128,7 @@ export default function RegisterPage() {
               required
             />
             <p className="mt-1 text-xs text-gray-400">
-              If an organization with your email domain exists, you'll join as a member
+              If an organization with your email domain exists, you&apos;ll join as a member
             </p>
           </div>
 
