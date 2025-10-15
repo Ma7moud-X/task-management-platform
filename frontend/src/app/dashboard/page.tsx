@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { getAccessToken, getCurrentUser, clearAuth } from '@/lib/auth';
+import { getAccessToken, getCurrentUser, clearAuth, logout } from '@/lib/auth';
 import { Task } from '@/types';
 import { useWebSocketTasks } from '@/hooks/useWebSocketTasks';
 import TaskForm from '@/components/tasks/TaskForm';
@@ -16,6 +16,7 @@ export default function DashboardPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const router = useRouter();
 
   // Fetch initial tasks
@@ -126,6 +127,20 @@ export default function DashboardPage() {
     }
   };
 
+  // Handle logout
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await logout();
+      router.push('/auth/login');
+    } catch (err: any) {
+      console.error('Logout error:', err);
+      // Still redirect even if logout fails
+      clearAuth();
+      router.push('/auth/login');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
@@ -136,13 +151,22 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-900 p-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        {user && (
-          <p className="text-sm text-gray-300">
-            Organization: {user.org_id} | Role: {user.role}
-          </p>
-        )}
+      <header className="mb-6 flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+          {user && (
+            <p className="text-sm text-gray-300">
+              Organization: {user.org_id} | Role: {user.role}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors"
+        >
+          {loggingOut ? 'Logging out...' : 'Logout'}
+        </button>
       </header>
 
       {error && <div className="p-2 mb-4 text-red-200 bg-red-900/50 rounded border border-red-700">{error}</div>}

@@ -1,5 +1,6 @@
 import { AuthUser } from '@/types';
 import { parseJwt } from './jwt';
+import { api } from './api';
 
 const TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
@@ -67,4 +68,24 @@ export function setEmailForOtp(email: string) {
 export function getEmailForOtp(): string | null {
   if (!isBrowser) return null;
   return localStorage.getItem(EMAIL_OTP_KEY);
+}
+
+export async function logout(): Promise<void> {
+  const refreshToken = getRefreshToken();
+  
+  // Call logout endpoint if we have a refresh token
+  if (refreshToken) {
+    try {
+      await api('/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+    } catch (error) {
+      // Continue with local cleanup even if API call fails
+      console.error('Logout API call failed:', error);
+    }
+  }
+  
+  // Clear local storage
+  clearAuth();
 }

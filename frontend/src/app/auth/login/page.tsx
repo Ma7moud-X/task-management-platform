@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { setEmailForOtp } from '@/lib/auth';
 
@@ -108,6 +109,15 @@ export default function LoginPage() {
           </svg>
           Sign in with Google
         </button>
+
+        <div className="text-center">
+          <p className="text-sm text-gray-400">
+            New user?{' '}
+            <Link href="/auth/register" className="text-blue-400 hover:text-blue-300 underline">
+              Create an account
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

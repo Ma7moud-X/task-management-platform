@@ -9,7 +9,7 @@ from app.models.user import User
 from app.schemas.auth import UserRegister, UserLogin, OTPVerify, Token, TokenResponse, RefreshTokenRequest, GoogleLogin
 from app.services.auth import get_or_create_user_from_google, register_organization_and_admin, authenticate_user, generate_otp, store_otp, verify_and_consume_otp
 from app.db.session import get_db
-from app.core.security import create_access_token, create_refresh_token, store_refresh_token, verify_refresh_token
+from app.core.security import create_access_token, create_refresh_token, require_member, store_refresh_token, verify_refresh_token, revoke_refresh_token
 from app.models.organization import Organization
 from app.core.auth_google import verify_google_id_token
 from app.core.email import send_otp_email
@@ -268,3 +268,16 @@ async def refresh_access_token(data: RefreshTokenRequest, db: AsyncSession = Dep
         "token_type": "bearer"
     }
 
+@router.post("/logout", status_code=status.HTTP_200_OK)
+async def logout(data: RefreshTokenRequest, db: AsyncSession = Depends(get_db), current_user: dict = Depends(require_member)):
+    logger.info("Logout attempt", extra={"user_id": current_user["user_id"]})
+    
+    # Revoke the refresh token
+    revoked = await revoke_refresh_token(db, data.refresh_token)
+    
+    if not revoked:
+        logger.warning("Logout failed - token not found", extra={"user_id": current_user["user_id"]})
+        # Don't throw error, just return success (token might already be invalid)
+    
+    logger.info("Logout successful", extra={"user_id": current_user["user_id"]})
+    return {"msg": "Logged out successfully"}
