@@ -1,7 +1,9 @@
 import { getAccessToken } from '@/lib/auth';
+import { config } from '@/lib/config';
 
 export async function api<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `/api${endpoint}`;
+  // Build URL using the API base (which is now /api for proxy)
+  const url = `${config.apiBaseUrl}${endpoint}`;
 
   // Auto-attach auth header if token exists
   const token = getAccessToken();
@@ -14,6 +16,7 @@ export async function api<T>(endpoint: string, options: RequestInit = {}): Promi
   const response = await fetch(url, {
     ...options,
     headers,
+    credentials: 'include',
   });
 
   if (!response.ok) {

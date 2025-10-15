@@ -73,36 +73,36 @@ export default function TaskForm({ orgId, task, onSubmit, onCancel }: TaskFormPr
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg w-full max-w-md">
-        <h2 className="text-xl font-bold mb-4">{task ? 'Edit Task' : 'Create New Task'}</h2>
+      <div className="bg-gray-800 p-6 rounded-lg w-full max-w-md border border-gray-700 shadow-xl">
+        <h2 className="text-xl font-bold mb-4 text-white">{task ? 'Edit Task' : 'Create New Task'}</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium">Title *</label>
+            <label className="block text-sm font-medium text-gray-200">Title *</label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full p-2 border rounded"
+              className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium">Description</label>
+            <label className="block text-sm font-medium text-gray-200">Description</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full p-2 border rounded"
+              className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               rows={3}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium">Status</label>
+            <label className="block text-sm font-medium text-gray-200">Status</label>
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as TaskStatus)}
-              className="w-full p-2 border rounded"
+              className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="todo">To Do</option>
               <option value="in_progress">In Progress</option>
@@ -111,26 +111,26 @@ export default function TaskForm({ orgId, task, onSubmit, onCancel }: TaskFormPr
           </div>
 
           <div>
-            <label className="block text-sm font-medium">Due Date</label>
+            <label className="block text-sm font-medium text-gray-200">Due Date</label>
             <input
               type="datetime-local"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className="w-full p-2 border rounded"
+              className="w-full mt-1 p-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
 
-          <div className="flex justify-end space-x-2">
+          <div className="flex justify-end space-x-2 pt-2">
             <button
               type="button"
               onClick={onCancel}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded cursor-pointer"
+              className="px-4 py-2 text-gray-300 bg-gray-700 hover:bg-gray-600 rounded cursor-pointer transition-colors border border-gray-600"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer"
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer transition-colors"
             >
               {task ? 'Update' : 'Create'}
             </button>
