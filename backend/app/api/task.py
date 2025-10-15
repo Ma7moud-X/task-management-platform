@@ -4,7 +4,7 @@ from uuid import UUID
 
 import jwt
 from app.core.security import require_admin, require_member
-from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskStatus
+from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse
 from app.schemas.auth import UserRole
 from app.services.task import create_task, get_tasks, publish_task_event, update_task, delete_task
 from app.db.session import get_db

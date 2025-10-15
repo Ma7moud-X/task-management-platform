@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { setEmailForOtp } from '@/lib/auth';
+import { config } from '@/lib/config';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -14,8 +15,7 @@ export default function LoginPage() {
   const router = useRouter();
 
   const handleGoogleLogin = () => {
-    // Redirect to backend's Google OAuth2 endpoint
-    window.location.href = `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/login/google`;
+    window.location.href = `${config.backendBaseUrl}/auth/login/google`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -87,7 +87,7 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={handleGoogleLogin}
-          className="w-full py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center justify-center gap-2 cursor-pointer transition-colors"
+          className="w-full py-2 px-4 bg-white text-gray-900 rounded hover:bg-gray-100 flex items-center justify-center gap-2 cursor-pointer transition-colors"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path

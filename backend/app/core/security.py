@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from passlib.context import CryptContext
 import jwt
 import secrets
@@ -10,7 +10,6 @@ from app.core.config import settings
 from app.models.user import User
 from app.schemas.auth import UserRole
 from app.db.session import get_db
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.refresh_token import RefreshToken
 from app.core.logging_config import get_logger
@@ -102,13 +101,22 @@ async def revoke_refresh_token(db: AsyncSession, token: str) -> bool:
     return True 
 
 # Fast token-only auth for most endpoints
-async def get_current_user_light(cred: HTTPAuthorizationCredentials = Depends(HTTPBearer())):
+async def get_current_user_light(request: Request):
+    token = request.cookies.get("access_token")
+    if not token:
+        logger.warning("No access token in cookies")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
+        )
+    
     try:
-        payload = verify_access_token(cred.credentials)
+        payload = verify_access_token(token)
         return {
             "user_id": payload["sub"],
             "org_id": payload["org_id"],
-            "role": payload["role"]
+            "role": payload["role"],
+            "email": payload.get("email")
         }
     except ValueError:
         logger.warning("Unauthorized access attempt")
@@ -118,9 +126,17 @@ async def get_current_user_light(cred: HTTPAuthorizationCredentials = Depends(HT
         )
 
 # Full database lookup only when needed
-async def get_current_user_full(cred: HTTPAuthorizationCredentials = Depends(HTTPBearer()), db: AsyncSession = Depends(get_db)):
+async def get_current_user_full(request: Request, db: AsyncSession = Depends(get_db)):
+    token = request.cookies.get("access_token")
+    if not token:
+        logger.warning("No access token in cookies")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
+        )
+    
     try:
-        payload = verify_access_token(cred.credentials)
+        payload = verify_access_token(token)
 
         result = await db.execute(select(User).where(User.id == payload["sub"]))
         user = result.scalars().first()

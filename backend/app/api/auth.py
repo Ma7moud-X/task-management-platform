@@ -1,16 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import urllib.parse
 import requests
 
 from app.models.user import User
-from app.schemas.auth import UserRegister, UserLogin, OTPVerify, Token, TokenResponse, RefreshTokenRequest, GoogleLogin
+from app.schemas.auth import UserRegister, UserLogin, OTPVerify, TokenResponse, GoogleLogin
 from app.services.auth import get_or_create_user_from_google, register_organization_and_admin, authenticate_user, generate_otp, store_otp, verify_and_consume_otp
 from app.db.session import get_db
-from app.core.security import create_access_token, create_refresh_token, require_member, store_refresh_token, verify_refresh_token, revoke_refresh_token
-from app.models.organization import Organization
+from app.core.security import create_access_token, create_refresh_token, require_member, store_refresh_token, verify_refresh_token, revoke_refresh_token, verify_access_token
 from app.core.auth_google import verify_google_id_token
 from app.core.email import send_otp_email
 from app.core.logging_config import get_logger
@@ -122,7 +121,8 @@ async def google_oauth_callback(code: str, db: AsyncSession = Depends(get_db)):
         refresh_token = create_refresh_token()
         await store_refresh_token(db, user.id, refresh_token)
         
-        # Redirect to frontend with tokens
+        # For cross-origin scenarios (different ports in dev), redirect to success page with tokens
+        # Frontend will then call /auth/google/complete to set cookies properly
         redirect_url = (
             f"{settings.FRONTEND_URL}/auth/google/success?"
             f"access_token={access_token}&"
@@ -134,7 +134,7 @@ async def google_oauth_callback(code: str, db: AsyncSession = Depends(get_db)):
         logger.error("Google OAuth2 callback failed", extra={"error": str(e)})
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/login?error=oauth_failed")
 
-@router.post("/login/google", response_model=TokenResponse)
+@router.post("/login/google")
 async def google_login(data: GoogleLogin, db: AsyncSession = Depends(get_db)):
     logger.info("Google login attempt")
     
@@ -168,11 +168,66 @@ async def google_login(data: GoogleLogin, db: AsyncSession = Depends(get_db)):
     refresh_token = create_refresh_token()
     await store_refresh_token(db, user.id, refresh_token)
     
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer"
-    }
+    # Set cookies and return success
+    response = JSONResponse(content={"message": "Login successful"})
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=False,  # Set to True in production
+        samesite="lax",
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/"
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=False,  # Set to True in production
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,  # 30 days
+        path="/"
+    )
+    return response
+
+@router.post("/google/complete")
+async def google_complete_login(data: TokenResponse, db: AsyncSession = Depends(get_db)):
+    """
+    Exchange Google OAuth tokens for HttpOnly cookies.
+    This handles cross-origin cookie setting after Google redirect.
+    """
+    logger.info("Completing Google OAuth with cookie exchange")
+    
+    # Verify the access token is valid
+    try:
+        payload = verify_access_token(data.access_token)
+    except ValueError:
+        logger.error("Invalid access token provided")
+        raise HTTPException(status_code=400, detail="Invalid access token")
+    
+    # Set cookies and return success
+    response = JSONResponse(content={"message": "Login successful"})
+    response.set_cookie(
+        key="access_token",
+        value=data.access_token,
+        httponly=True,
+        secure=False,  # Set to True in production
+        samesite="lax",
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/"
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=data.refresh_token,
+        httponly=True,
+        secure=False,  # Set to True in production
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,  # 30 days
+        path="/"
+    )
+    
+    logger.info("Google OAuth cookies set successfully", extra={"user_id": payload.get("sub")})
+    return response
 
 @router.post("/login", status_code=status.HTTP_202_ACCEPTED)
 async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
@@ -195,7 +250,7 @@ async def login(data: UserLogin, db: AsyncSession = Depends(get_db)):
     
     return {"msg": "OTP sent", "email": data.email}
 
-@router.post("/verify-otp", response_model=TokenResponse)
+@router.post("/verify-otp")
 async def verify_otp(data: OTPVerify, db: AsyncSession = Depends(get_db)):
     logger.info("OTP verification attempt", extra={"email": data.email})
     
@@ -229,17 +284,42 @@ async def verify_otp(data: OTPVerify, db: AsyncSession = Depends(get_db)):
     await store_refresh_token(db, user.id, refresh_token)
     
     logger.info("OTP verification successful", extra={"user_id": str(user.id)})
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer"
-    }
+    
+    # Set cookies and return success
+    response = JSONResponse(content={"message": "OTP verified successfully"})
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=False,  # Set to True in production
+        samesite="lax",
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/"
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=False,  # Set to True in production
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,  # 30 days
+        path="/"
+    )
+    return response
 
-@router.post("/refresh", response_model=TokenResponse)
-async def refresh_access_token(data: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
+@router.post("/refresh")
+async def refresh_access_token(request: Request, db: AsyncSession = Depends(get_db)):
     logger.info("Refresh token attempt")
+    
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        logger.warning("No refresh token in cookies")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No refresh token provided"
+        )
 
-    user = await verify_refresh_token(db, data.refresh_token)
+    user = await verify_refresh_token(db, refresh_token)
     if not user:
         logger.warning("Refresh token verification failed")
         raise HTTPException(
@@ -258,26 +338,60 @@ async def refresh_access_token(data: RefreshTokenRequest, db: AsyncSession = Dep
     )
     
     # Create and store new refresh token
-    refresh_token = create_refresh_token()
-    await store_refresh_token(db, user.id, refresh_token)
+    new_refresh_token = create_refresh_token()
+    await store_refresh_token(db, user.id, new_refresh_token)
     
     logger.info("Token refreshed successfully", extra={"user_id": str(user.id)})
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "bearer"
-    }
+    
+    # Set new cookies
+    response = JSONResponse(content={"message": "Tokens refreshed successfully"})
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=False,  # Set to True in production
+        samesite="lax",
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/"
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=new_refresh_token,
+        httponly=True,
+        secure=False,  # Set to True in production
+        samesite="lax",
+        max_age=60 * 60 * 24 * 30,  # 30 days
+        path="/"
+    )
+    return response
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
-async def logout(data: RefreshTokenRequest, db: AsyncSession = Depends(get_db), current_user: dict = Depends(require_member)):
+async def logout(request: Request, db: AsyncSession = Depends(get_db), current_user: dict = Depends(require_member)):
     logger.info("Logout attempt", extra={"user_id": current_user["user_id"]})
     
-    # Revoke the refresh token
-    revoked = await revoke_refresh_token(db, data.refresh_token)
+    refresh_token = request.cookies.get("refresh_token")
     
-    if not revoked:
-        logger.warning("Logout failed - token not found", extra={"user_id": current_user["user_id"]})
-        # Don't throw error, just return success (token might already be invalid)
+    # Revoke the refresh token if it exists
+    if refresh_token:
+        revoked = await revoke_refresh_token(db, refresh_token)
+        if not revoked:
+            logger.warning("Logout - token not found", extra={"user_id": current_user["user_id"]})
     
     logger.info("Logout successful", extra={"user_id": current_user["user_id"]})
-    return {"msg": "Logged out successfully"}
+    
+    # Clear cookies
+    response = JSONResponse(content={"message": "Logged out successfully"})
+    response.delete_cookie(key="access_token", path="/")
+    response.delete_cookie(key="refresh_token", path="/")
+    return response
+
+@router.get("/me")
+async def get_me(current_user: dict = Depends(require_member)):
+    logger.info("Get current user", extra={"user_id": current_user["user_id"]})
+    return {
+        "id": current_user["user_id"],
+        "email": current_user.get("email"),
+        "role": current_user["role"],
+        "org_id": current_user["org_id"]
+    }
+

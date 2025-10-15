@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { getAccessToken, getCurrentUser, clearAuth, logout } from '@/lib/auth';
+import { logout } from '@/lib/auth';
+import { useAuth } from '@/hooks/useAuth';
 import { Task } from '@/types';
 import { useWebSocketTasks } from '@/hooks/useWebSocketTasks';
 import TaskForm from '@/components/tasks/TaskForm';
@@ -18,18 +19,11 @@ export default function DashboardPage() {
   const [exporting, setExporting] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
 
   // Fetch initial tasks
   const fetchTasks = useCallback(async () => {
-    const token = getAccessToken();
-    if (!token) {
-      router.push('/auth/login');
-      return;
-    }
-
-    const user = getCurrentUser();
     if (!user) {
-      clearAuth();
       router.push('/auth/login');
       return;
     }
@@ -40,8 +34,7 @@ export default function DashboardPage() {
       });
       setTasks(data);
     } catch (err: any) {
-      if (err.message?.includes('401') || err.message?.includes('403')) {
-        clearAuth();
+      if (err.message?.includes('Session expired') || err.message?.includes('401') || err.message?.includes('403')) {
         router.push('/auth/login');
       } else {
         setError('Failed to load tasks');
@@ -49,11 +42,13 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, user]);
 
   useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
+    if (!authLoading) {
+      fetchTasks();
+    }
+  }, [fetchTasks, authLoading]);
 
   // Real-time updates via WebSocket
   const handleTaskCreated = useCallback((task: Task) => {
@@ -79,8 +74,6 @@ export default function DashboardPage() {
   const handleTaskDeleted = useCallback((taskId: string) => {
     setTasks((prev) => prev.filter((task) => task.id !== taskId));
   }, []);
-
-  const user = getCurrentUser();
   
   // Subscribe to WebSocket updates (hooks must be called unconditionally)
   useWebSocketTasks(
@@ -136,12 +129,11 @@ export default function DashboardPage() {
     } catch (err: any) {
       console.error('Logout error:', err);
       // Still redirect even if logout fails
-      clearAuth();
       router.push('/auth/login');
     }
   };
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <p className="text-white">Loading tasks...</p>

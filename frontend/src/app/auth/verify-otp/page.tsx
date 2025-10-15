@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { setAuth, getEmailForOtp, clearAuth } from '@/lib/auth';
-import { TokenResponse } from '@/types';
+import { getEmailForOtp, clearEmailForOtp } from '@/lib/auth';
 
 export default function VerifyOtpPage() {
   const [otp, setOtp] = useState('');
@@ -34,18 +33,16 @@ export default function VerifyOtpPage() {
     isVerifying.current = true;
 
     try {
-      // Backend returns TokenResponse: { access_token, refresh_token, token_type }
-      const response = await api<TokenResponse>('/auth/verify-otp', {
+      await api('/auth/verify-otp', {
         method: 'POST',
         body: JSON.stringify({ email, otp }),
       });
 
-      setAuth(response.access_token, response.refresh_token);
+      clearEmailForOtp();
 
       router.push('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Invalid OTP');
-      clearAuth();
       isVerifying.current = false;
     } finally {
       setLoading(false);

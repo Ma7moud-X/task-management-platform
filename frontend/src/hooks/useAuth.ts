@@ -5,14 +5,16 @@ import { AuthUser } from '@/types';
 import { getCurrentUser } from '@/lib/auth';
 
 export function useAuth() {
-  const [user, setUser] = useState<AuthUser | null>(getCurrentUser());
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // On mount, check if user is already logged in (e.g., from another tab)
-    const currentUser = getCurrentUser();
-    setUser(currentUser);
-    setLoading(false);
+    async function loadUser() {
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
+      setLoading(false);
+    }
+    loadUser();
   }, []);
 
   return { user, loading };

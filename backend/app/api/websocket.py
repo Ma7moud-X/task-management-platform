@@ -1,15 +1,26 @@
-from fastapi import APIRouter, WebSocket, Query
+from fastapi import APIRouter, WebSocket, Query, Cookie
+from typing import Optional
 from app.core.websocket import manager
 from app.db.redis import redis_client
-import asyncio
 import json
 
 router = APIRouter()
 
 @router.websocket("/ws/{org_id}")
-async def websocket_endpoint(websocket: WebSocket, org_id: str, token: str = Query(...)):
+async def websocket_endpoint(
+    websocket: WebSocket, 
+    org_id: str, 
+    token: Optional[str] = Query(None),
+    access_token: Optional[str] = Cookie(None)
+):
+    # Try to get token from query param first, then from cookie
+    auth_token = token or access_token
+    if not auth_token:
+        await websocket.close(code=1008, reason="No token provided")
+        return
+    
     # Connect and validate
-    connected = await manager.connect(websocket, org_id, token)
+    connected = await manager.connect(websocket, org_id, auth_token)
     if not connected:
         return
 

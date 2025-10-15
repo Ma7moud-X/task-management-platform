@@ -1,6 +1,5 @@
 import { config } from '@/lib/config';
 import { Task } from '@/types';
-import { getAccessToken } from '@/lib/auth';
 
 type WSEvent = 'created' | 'updated' | 'deleted';
 type WSCallback = (event: WSEvent, task: Task) => void;
@@ -19,13 +18,8 @@ export class WebSocketManager {
     this.disconnect();
 
     this.orgId = orgId;
-    const token = getAccessToken();
-    if (!token) {
-      console.error('Cannot connect WebSocket: No access token available');
-      return;
-    }
     
-    const url = `${config.websocketBaseUrl}/ws/${orgId}?token=${encodeURIComponent(token)}`;
+    const url = `${config.websocketBaseUrl}/ws/${orgId}`;
 
     this.socket = new WebSocket(url);
 

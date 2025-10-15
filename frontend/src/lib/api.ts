@@ -1,23 +1,66 @@
-import { getAccessToken } from '@/lib/auth';
 import { config } from '@/lib/config';
 
 export async function api<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   // Build URL using the API base (which is now /api for proxy)
   const url = `${config.apiBaseUrl}${endpoint}`;
 
-  // Auto-attach auth header if token exists
-  const token = getAccessToken();
   const headers = {
     'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` }), // conditionally adding the token
-    ...options.headers, // conditionally adding options (if not null)
+    ...options.headers,
   };
 
   const response = await fetch(url, {
     ...options,
     headers,
-    credentials: 'include',
+    credentials: 'include',  // This sends cookies automatically
   });
+
+  // Handle 401 errors by attempting to refresh the token
+  if (response.status === 401 && endpoint !== '/auth/refresh' && endpoint !== '/auth/me') {
+    try {
+      const refreshResponse = await fetch(`${config.apiBaseUrl}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (refreshResponse.ok) {
+        // Retry original request
+        return fetch(url, {
+          ...options,
+          headers,
+          credentials: 'include',
+        }).then(async (retryResponse) => {
+          if (!retryResponse.ok) {
+            const errorData = await retryResponse.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'An error occurred');
+          }
+
+          if (retryResponse.status === 204 || retryResponse.headers.get('content-length') === '0') {
+            return {} as T;
+          }
+
+          const contentType = retryResponse.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            return retryResponse.json() as Promise<T>;
+          }
+
+          return {} as T;
+        });
+      } else {
+        // Refresh failed, redirect to login
+        if (typeof window !== 'undefined') {
+          window.location.href = '/auth/login';
+        }
+        throw new Error('Session expired');
+      }
+    } catch (error) {
+      // Refresh failed, redirect to login
+      if (typeof window !== 'undefined') {
+        window.location.href = '/auth/login';
+      }
+      throw error;
+    }
+  }
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));

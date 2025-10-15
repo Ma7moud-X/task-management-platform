@@ -1,7 +1,7 @@
 import json
 import uuid
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
@@ -103,24 +103,47 @@ async def get_or_create_user_from_google(db: AsyncSession, email: str, name: str
     if user:
         return user
 
-    # If not, check if email domain matches an existing org
     domain = email.split("@")[-1]
+    
+    # Check if organization with this domain exists
     org_result = await db.execute(
         select(Organization).where(Organization.domain == domain)
     )
     org = org_result.scalars().first()
-    if not org:
-        raise ValueError("No organization found for this email domain")
-
-    # Create member user
+    
+    if org:
+        # Organization exists, create user as MEMBER
+        new_user = User(
+            email=email,
+            hashed_password="",  # No password for Google users
+            name=name,
+            role=UserRole.MEMBER,
+            org_id=org.id
+        )
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
+        return new_user
+    
+    # Organization doesn't exist, create it and make user ADMIN
+    org_name = domain.split('.')[0].capitalize()
+    
+    new_org = Organization(
+        id=uuid.uuid4(),
+        name=org_name,
+        domain=domain
+    )
+    db.add(new_org)
+    await db.flush()  # Get org.id
+    
+    # Create admin user
     new_user = User(
         email=email,
         hashed_password="",  # No password for Google users
-        name= name,
-        role=UserRole.MEMBER,
-        org_id=org.id
+        name=name,
+        role=UserRole.ADMIN,
+        org_id=new_org.id
     )
-    
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
