@@ -8,9 +8,9 @@
   NEXT_TELEMETRY_DISABLED = "1"
 
 [[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+  # Removed catch-all redirect. This redirect served index.html for all paths
+  # and prevented Netlify from handling Next.js server functions and API
+  # routes. Next.js plugin will handle routing and server functions.
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
