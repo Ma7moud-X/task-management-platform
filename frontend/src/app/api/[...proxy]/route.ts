@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
  * - Can add middleware (rate limiting, logging, etc.)
  */
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL || 'http://localhost:8000';
 
 // Helper to check if we should skip proxying (e.g., for Next.js internal routes)
 function shouldProxy(pathname: string): boolean {
